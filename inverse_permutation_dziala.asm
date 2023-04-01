@@ -1,10 +1,15 @@
-global inverse_permutation
 
-; rdi - value n passed as first argument
-; rsi - pointer to the arrray p passed as second argument
+
+global inverse_permutation            ; inverse_permutation is a function that checks whether a given array
+                                      ; contains a permutation and if so, inverts it. It requires two arguments:
+                                      ; First: n - size of array. Must be in range of size_t (C language).
+                                      ; Second: p - pointer to the array. Must be a correct pointer that points to
+                                      ; a n-element array. Each element must be in range of an int (C language). 
 
 inverse_permutation:
-         test    rdi, rdi             ; Checking if n==0.
+                                      ; rdi - value n passed as first argument
+                                      ; rsi - pointer to the arrray p passed as second argument
+         test    rdi, rdi             ; Checking if n == 0.
          jz      .false               ; If so, we return false.
          mov     rax, 0x80000000      ; Moving value (1<<31) to rax.
          cmp     rdi, rax             ; Checking if n > (1<<31).
@@ -13,45 +18,38 @@ inverse_permutation:
          xor     rcx, rcx             ; We will be using rcx as loop iterator so we zero it.
          dec     edi                  ; n-1 value will be more useful than n later.
 
-.loop_range:                          ; Etykieta pętli, w której będziemy sprawdzać, czy wszystkie elementy tablicy są w zakresie [0, n) JAK.rdi+0x20*rcx
-         mov     edx, [rsi+rcx*4]     ; ecx będzie naszym iteratorem.
-         cmp     edx, 0x0             ; Sprawdzamy, czy element nie jest mniejszy od zera.
-         jl      .false               ; Jeśli tak, to zwracamy false.
-         cmp     edx, edi             ; Sprawdzamy, czy element jest większy od n-1.
-         jg      .false               ; Jeśli tak, to zwracamy false.
-         inc     ecx                  ; Przechodzimy do następnego pola tablicy p
-         cmp     edi, ecx             ; Patrzymy, czy nasz iterator jest większy od n-1
-         jge     .loop_range          ; Jeśli tak to wracamy na początek pętli
+         mov     r8d, 0x1              ; We want to have value ~(1<<31) in r8d. So at first we set it to 1.
+         shl     r8d, 0x1f             ; Then we shift that one left 31 times.
+         mov     r9d, r8d              ; Value (1<<31) also might be handy so we copy it to r9d.
+         not     r8d                   ; Then we just simply negate r9d and now it's set to ~(1<<31).
 
-         xor     ecx, ecx             ; Jeśli jednak iterator był równy n, to zerujemy rcx do następnej pętli
-         mov     r8, 0x1              ; Do rejestru r8 w następnych trzech linijkach
-         shl     r8, 0x1f             ; wpisujemy wartość ~(1<<31). Ta liczba pomoże
-         mov     r9, r8               ; w flipowaniu bitu znaku w intach.
-         not     r8                   ; W r9 natomiast będziemy mieć (1<<31)
+.loop_correct:                        ; .loop_correct label represents a loop that checks if array
+                                      ; p holds a proper permutation. ecx will be out iterator.
+         mov     eax, [rsi+rcx*4]     ; We assign eax to element of p at index ecx.
+         and     eax, r8d             ; We clear sign bit of eax.
+         cmp     eax, edi             ; Checking if eax > n-1.
+         jg      .reverse_while       ; If so, we jump to .reverse_while label.
+         mov     edx, [rsi+rax*4]     ; We assign edx to p[eax].
+         mov     r10d, edx            ; Copying edx into r10d.
+         xor     r10d, r8d            ; Performing xor on r10d and ~(1<<31).
+         cmp     r10d, 0x0            ; Checking if r10d is less than zero.
+         jl      .reverse_while       ; If so, array p is not a permutation and we jump to .reverse_while label.
+         or      [rsi+rax*4], r9d     ; Performing or on p[eax] and (1<<31).
+         inc     ecx                  ; Increasing our iterator - ecx by one.
+         cmp     edi, ecx             ; Checking if ecx < n.
+         jge     .loop_correct        ; If so, we jump to beginning of our loop
+         xor     rdx, rdx             ; If not, we make rdx zero.
+         jmp     .invert_while        ; Then we jump to .invert_while label.
 
-.loop_unique:                         ; Tu będziemy sprawdzać, czy elementy są unikalne
-         mov     eax, [rsi+rcx*4]     ; Do eax wpisujemy kolejny element tablicy p. // j = p[i]
-         and     rax, r8              ; Zmieniamy bit znaku w rax (o ile tam był) // j = p[i] & ~(1<<31)
-         mov     edx, [rsi+rax*4]     ; edx = p[j]
-         mov     r10d, edx            ; Tworzymy kopię edx w r10, czyli r10=p[j].
-         xor     r10d, r8d            ; r10d = p[j] ^ ~(1<<31)
-         cmp     r10d, 0x0             ; Sprawdzamy, czy edx jest mniejsze od 0
-         jl      .reverse_while       ; Jeśli tak, to permutacja jest niepoprawna i musimy cofnąć zmiany
-         or      [rsi+rax*4], r9d     ; p[j] |= 1<<31
-         inc     ecx
-         cmp     edi, ecx
-         jge     .loop_unique
-         xor     rdx, rdx
-         jmp     .invert_while
-
-.reverse_while:                       ; Jeśli okaże się, że p nie zawiera unikalnych liczb, to trzeba będzie przywrócić zmiany
-         test    ecx, ecx             ; Jeśli tu skoczyliśmy, to i=ecx, j=eax
-         jz      .false               ; Jeśli rejestr ecx (czyli zmienna i) == 0 to zwracamy false
-         dec     ecx
-         mov     r10d, [rsi+rcx*4]    ; j = r10d = p[i]
-         and     r10d, r8d            ; j = r10d & ~(1<<31) = p[i] & ~(1<<31)
-         and     [rsi+r10*4], r8d      ; p[j] &= ~(1<<31)
-         jmp     .reverse_while          
+.reverse_while:                       ; If p does not contain a permutation we have to reverse changes we've made. 
+                                      ; .reverse_while label performs just that.
+         test    ecx, ecx             ; Checking if ecx == 0.
+         jz      .false               ; If so, we just return false.
+         dec     ecx                  ; If not, we decerase ecx by one.
+         mov     r10d, [rsi+rcx*4]    ; Assigning r10d to p[ecx].
+         and     r10d, r8d            ; Performing and on p[ecx] and ~(1<<31).
+         and     [rsi+r10*4], r8d     ; Performing and on p[r10d] and ~(1<<31).
+         jmp     .reverse_while       ; Jumping to the beginning of the .reverse_while loop.
 
 .false:                               ; .false label is used to return value representing false.
          xor     eax, eax             ; rax is now equal to zero.
