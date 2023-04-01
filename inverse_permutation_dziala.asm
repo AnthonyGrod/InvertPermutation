@@ -41,10 +41,7 @@ inverse_permutation:
          inc     ecx
          cmp     edi, ecx
          jge     .loop_unique
-         xor     rcx, rcx
-         xor     r9, r9
          xor     rdx, rdx
-         xor     rax, rax
          jmp     .invert_while
 
 .reverse_while:                       ; Jeśli okaże się, że p nie zawiera unikalnych liczb, to trzeba będzie przywrócić zmiany
